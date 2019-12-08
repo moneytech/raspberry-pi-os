@@ -48,7 +48,7 @@ preserve_boot_args:
 ENDPROC(preserve_boot_args)
 ```
 
-Accordingly to the [kernel boot protocol](https://github.com/torvalds/linux/blob/v4.14/Documentation/arm64/booting.txt#L150), parameters are passed to the kernel in registers `x0 - x3`. `x0` contains the physical address of device tree blob (`.dtb`) in system RAM. `x1 - x3` are reserved for future usage. What this function is doing is copying the content of `x0 - x3` registers to the [boot_args](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/setup.c#L93) array and then [invalidate](https://developer.arm.com/products/architecture/a-profile/docs/den0024/latest/caches/cache-maintenance) the corresponding cache line from the data cache. Cache maintenance in a multiprocessor system is a large topic on its own, and we are going to skip it for now. For those who are interested in this subject, I can recommend reading [Caches](https://developer.arm.com/products/architecture/a-profile/docs/den0024/latest/caches) and [Multi-core processors](https://developer.arm.com/products/architecture/a-profile/docs/den0024/latest/multi-core-processors) chapters of the `ARM Programmer’s Guide`.
+Accordingly to the [kernel boot protocol](https://github.com/torvalds/linux/blob/v4.14/Documentation/arm64/booting.txt#L150), parameters are passed to the kernel in registers `x0 - x3`. `x0` contains the physical address of device tree blob (`.dtb`) in system RAM. `x1 - x3` are reserved for future usage. What this function is doing is copying the content of `x0 - x3` registers to the [boot_args](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/setup.c#L93) array and then [invalidate](https://developer.arm.com/docs/den0024/latest/caches/cache-maintenance) the corresponding cache line from the data cache. Cache maintenance in a multiprocessor system is a large topic on its own, and we are going to skip it for now. For those who are interested in this subject, I can recommend reading [Caches](https://developer.arm.com/docs/den0024/latest/caches) and [Multi-core processors](https://developer.arm.com/docs/den0024/latest/multi-core-processors) chapters of the `ARM Programmer’s Guide`.
 
 ### el2_setup
 
@@ -78,7 +78,7 @@ CPU_LE(    bic    x0, x0, #(3 << 24)    )    // Clear the EE and E0E bits for EL
     ret
 ```
 
-If it happens that we execute at EL1, `sctlr_el1` register is updated so that CPU works in either `big-endian` of `little-endian` mode depending on the value of [CPU_BIG_ENDIAN](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/Kconfig#L612) config setting. Then we just exit from the `el2_setup` function and return [BOOT_CPU_MODE_EL1](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/include/asm/virt.h#L55) constant. Accordingly to [ARM64 Function Calling Conventions](http://infocenter.arm.com/help/topic/com.arm.doc.ihi0055b/IHI0055B_aapcs64.pdf) return value should be placed in `x0` register (or `w0` in our case. You can think about `w0` register as the first 32 bit of `x0`)
+If it happens that we execute at EL1, `sctlr_el1` register is updated so that CPU works in either `big-endian` of `little-endian` mode depending on the value of [CPU_BIG_ENDIAN](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/Kconfig#L612) config setting. Then we just exit from the `el2_setup` function and return [BOOT_CPU_MODE_EL1](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/include/asm/virt.h#L55) constant. Accordingly to [ARM64 Function Calling Conventions](http://infocenter.arm.com/help/topic/com.arm.doc.ihi0055b/IHI0055B_aapcs64.pdf) return value should be placed in `x0` register (or `w0` in our case. You can think about `w0` register as the first 32 bit of `x0`.).
 
 ```
 1:    mrs    x0, sctlr_el2
@@ -87,7 +87,7 @@ CPU_LE(    bic    x0, x0, #(1 << 25)    )    // Clear the EE bit for EL2
     msr    sctlr_el2, x0
 ```
 
-If it appears that we are booted in EL2 we are doing the same kind of setup for EL2 ( note that this time `sctlr_el2` register is used instead of `sctlr_el1`)
+If it appears that we are booted in EL2 we are doing the same kind of setup for EL2 (note that this time `sctlr_el2` register is used instead of `sctlr_el1`.).
 
 ```
 #ifdef CONFIG_ARM64_VHE
@@ -180,7 +180,7 @@ The provided code is responsible for enabling SRE (System Register Interface) Th
 #endif
 ```
 
-When the processor is executing in 32-bit execution mode, there is a concept of "coprocessor". The coprocessor can be used to access information, that in 64-bit execution mode is typically accessed via system registers. You can read about what exactly is accessible via coprocessor [in the official documentation](http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0311d/I1014521.html). `msr    hstr_el2, xzr` instruction allows using coprocessor from lower exception levels. This makes sense to do only when compatibility mode is enabled (in this mode kernel can run 32-bit user applications on top of 64-bit kernel) 
+When the processor is executing in 32-bit execution mode, there is a concept of "coprocessor". The coprocessor can be used to access information, that in 64-bit execution mode is typically accessed via system registers. You can read about what exactly is accessible via coprocessor [in the official documentation](http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0311d/I1014521.html). `msr    hstr_el2, xzr` instruction allows using coprocessor from lower exception levels. This makes sense to do only when compatibility mode is enabled (in this mode kernel can run 32-bit user applications on top of 64-bit kernel.).
 
 ```
     /* EL2 debug */
@@ -267,11 +267,11 @@ We don't plan to use EL2 now, though some functionality requires it. We need it,
 
 Finally, we need to initialize processor state at EL1 and switch exception levels. We already did it for the [RPi OS](https://github.com/s-matyukevich/raspberry-pi-os/blob/master/src/lesson02/src/boot.S#L27-L33) so I am not going to explain the details of this code. 
 
-The only new thing here is the way how `elr_el2` is initialized. `lr` or Link Register is an alias for `x30`. Whenever you execute `br` (Branch Link) instruction `x30` is automatically populated with the address of the current instruction. This fact is usually used by `ret` instruction, so it knows where exactly to return. In our case, `lr` points [here](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/head.S#L119) and, because of the way how we initialized  `elr_el2`, this is also the place from which the execution is going to be resumed after switching to EL1.
+The only new thing here is the way how `elr_el2` is initialized. `lr` or Link Register is an alias for `x30`. Whenever you execute `bl` (Branch Link) instruction `x30` is automatically populated with the address of the current instruction. This fact is usually used by `ret` instruction, so it knows where exactly to return. In our case, `lr` points [here](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/head.S#L119) and, because of the way how we initialized  `elr_el2`, this is also the place from which the execution is going to be resumed after switching to EL1.
 
 ### Processor initialization at EL1
 
-Now we are back to the `stext` function. Next few lines are not very important for us, but I wand to explain them for the sake of completeness.
+Now we are back to the `stext` function. Next few lines are not very important for us, but I want to explain them for the sake of completeness.
 
 ```
     adrp    x23, __PHYS_OFFSET

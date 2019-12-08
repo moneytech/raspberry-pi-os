@@ -37,7 +37,7 @@ static inline void start_thread(struct pt_regs *regs, unsigned long pc,
 }
 ```
 
-By the time when `start_thread` is executed, the current process operates in the kernel mode. `start_thred` is given access to the current `pt_regs` struct, which is used to set saved `pstate`, `sp` and `pc` fields. The logic here is exactly the same as in the RPi OS `move_to_user_mode` function, so I don't want to repeat it one more time. An important thing to remember is that `start_thread` prepares saved processor state in such a way, that `kernel_exit` macro will eventually move the process to user mode.
+By the time `start_thread` is executed, the current process operates in the kernel mode. `start_thread` is given access to the current `pt_regs` struct, which is used to set saved `pstate`, `sp` and `pc` fields. The logic here is exactly the same as in the RPi OS `move_to_user_mode` function, so I don't want to repeat it one more time. An important thing to remember is that `start_thread` prepares saved processor state in such a way that `kernel_exit` macro will eventually move the process to user mode.
 
 ###  Linux syscalls
 
@@ -65,13 +65,13 @@ void * const sys_call_table[__NR_syscalls] __aligned(4096) = {
 };
 ``` 
 
-All syscalls are initially allocated to point to `sys_ni_syscall` function ("ni" here means "non-existent"). Syscall with number `0` and all syscalls that aren't defined for the current architecture will keep this handler. All other syscall handlers in the `sys_call_table` array are rewritten in the [asm/unistd.h](https://github.com/torvalds/linux/blob/v4.14/include/uapi/asm-generic/unistd.h) header file. As you might see, this file simply provide a mapping between syscall number and syscall handler function.
+All syscalls are initially allocated to point to `sys_ni_syscall` function ("ni" here means "non-existent"). Syscall with number `0` and all syscalls that aren't defined for the current architecture will keep this handler. All other syscall handlers in the `sys_call_table` array are rewritten in the [asm/unistd.h](https://github.com/torvalds/linux/blob/v4.14/include/uapi/asm-generic/unistd.h) header file. As you might see, this file simply provides a mapping between syscall number and syscall handler function.
 
 ### Low-level syscall handling code
 
 Ok, we've seen how `sys_call_table` is created and populated, now it is time to investigate how it is used by the low-level syscall handling code. And once again the basic mechanism here will be almost exactly the same as in the RPi OS. 
 
-We know that any syscall is a synchronous exception and all exception handlers are defined in the exception vector table (it is our favorite [vectors](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/entry.S#L367) array) The handler that we are interested in should be the one that handles synchronous exceptions generated at EL0. All of this makes it trivial to find the right handler, it is called [el0_sync](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/entry.S#L598) and looks like the following.
+We know that any syscall is a synchronous exception and all exception handlers are defined in the exception vector table (it is our favorite [vectors](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/entry.S#L367) array). The handler that we are interested in should be the one that handles synchronous exceptions generated at EL0. All of this makes it trivial to find the right handler, it is called [el0_sync](https://github.com/torvalds/linux/blob/v4.14/arch/arm64/kernel/entry.S#L598) and looks like the following.
 
 ```
 el0_sync:
@@ -155,7 +155,7 @@ Interrupts and debug exceptions are enabled.
     ct_user_exit 1
 ``` 
 
-The event of switching from user mode to kernel mode is recorded.
+The event of switching from the user mode to the kernel mode is recorded.
 
 ```
     ldr    x16, [tsk, #TSK_TI_FLAGS]    // check for syscall hooks
@@ -164,7 +164,7 @@ The event of switching from user mode to kernel mode is recorded.
 
 ```
 
-In case if the current task is executed under a syscall tracer `_TIF_SYSCALL_WORK` flag should be set. In this case, `__sys_trace` function will be called. As our discussion is only focused on the general case, we are going to skip this function.
+In case the current task is executed under a syscall tracer `_TIF_SYSCALL_WORK` flag should be set. In this case, `__sys_trace` function will be called. As our discussion is only focused on the general case, we are going to skip this function.
 
 ```
     cmp     wscno, wsc_nr            // check upper syscall limit

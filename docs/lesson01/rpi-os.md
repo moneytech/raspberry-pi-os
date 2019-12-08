@@ -27,7 +27,7 @@ ASMOPS = -Iinclude
 BUILD_DIR = build
 SRC_DIR = src
 
-all : kernel7.img
+all : kernel8.img
 
 clean :
     rm -rf $(BUILD_DIR) *.img 
@@ -47,9 +47,9 @@ OBJ_FILES += $(ASM_FILES:$(SRC_DIR)/%.S=$(BUILD_DIR)/%_s.o)
 DEP_FILES = $(OBJ_FILES:%.o=%.d)
 -include $(DEP_FILES)
 
-kernel7.img: $(SRC_DIR)/linker.ld $(OBJ_FILES)
-    $(ARMGNU)-ld -T $(SRC_DIR)/linker.ld -o $(BUILD_DIR)/kernel7.elf  $(OBJ_FILES)
-    $(ARMGNU)-objcopy $(BUILD_DIR)/kernel7.elf -O binary kernel7.img
+kernel8.img: $(SRC_DIR)/linker.ld $(OBJ_FILES)
+    $(ARMGNU)-ld -T $(SRC_DIR)/linker.ld -o $(BUILD_DIR)/kernel8.elf  $(OBJ_FILES)
+    $(ARMGNU)-objcopy $(BUILD_DIR)/kernel8.elf -O binary kernel8.img
 ``` 
 Now, let's inspect this file in detail:
 ```
@@ -79,13 +79,13 @@ SRC_DIR = src
 `SRC_DIR` and `BUILD_DIR` are directories that contain source code and compiled object files, respectively.
 
 ```
-all : kernel7.img
+all : kernel8.img
 
 clean :
     rm -rf $(BUILD_DIR) *.img 
 ```
 
-Next, we define make targets. The first two targets are pretty simple: the `all` target is the default one, and it is executed whenever you type `make` without any arguments (`make` always uses the first target as the default). This target just redirects all work to a different target, `kernel7.img`.
+Next, we define make targets. The first two targets are pretty simple: the `all` target is the default one, and it is executed whenever you type `make` without any arguments (`make` always uses the first target as the default). This target just redirects all work to a different target, `kernel8.img`. 
 The `clean` target is responsible for deleting all compilation artifacts and the compiled kernel image.
 
 ```
@@ -116,16 +116,17 @@ DEP_FILES = $(OBJ_FILES:%.o=%.d)
 The next two lines are a little bit tricky. If you take a look at how we defined our compilation targets for both C and assembler source files, you will notice that we used the `-MMD` parameter. This parameter instructs the `gcc` compiler to create a dependency file for each generated object file. A dependency file defines all of the dependencies for a particular source file. These dependencies usually contain a list of all included headers. We need to include all of the generated dependency files so that make knows what exactly to recompile in case a header changes. 
 
 ```
-$(ARMGNU)-ld -T $(SRC_DIR)/linker.ld -o kernel7.elf  $(OBJ_FILES)
+$(ARMGNU)-ld -T $(SRC_DIR)/linker.ld -o kernel8.elf  $(OBJ_FILES)
 ``` 
 
-We use the `OBJ_FILES` array to build the `kernel7.elf` file. We use the linker script `src/linker.ld` to define the basic layout of the resulting executable image (we will discuss the linker script in the next section).
+We use the `OBJ_FILES` array to build the `kernel8.elf` file. We use the linker script `src/linker.ld` to define the basic layout of the resulting executable image (we will discuss the linker script in the next section).
 
 ```
-$(ARMGNU)-objcopy kernel7.elf -O binary kernel7.img
+$(ARMGNU)-objcopy kernel8.elf -O binary kernel8.img
 ```
 
-`kernel7.elf` is in the [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) format. The problem is that ELF files are designed to be executed by an operating system. To write a bare-metal program, we need to extract all executable and data sections from the ELF file and put them into the `kernel7.img` image. 
+`kernel8.elf` is in the [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) format. The problem is that ELF files are designed to be executed by an operating system. To write a bare-metal program, we need to extract all executable and data sections from the ELF file and put them into the `kernel8.img` image. The trailing `8` denotes ARMv8 which is a 64-bit architecture. This filename tells the firmware to boot the processor into 64-bit mode.
+You can also boot the CPU in the 64-bit mode by using `arm_control=0x200` flag in the `config.txt` file. The RPi OS previously used this method, and you can still find it in some of the exercise answers. However, `arm_control` flag is undocumented and it is preferable to use `kernel8.img` naming convention instead.
 
 ### The linker script
 
@@ -145,7 +146,7 @@ SECTIONS
 }
 ``` 
 
-After startup, the Raspberry Pi loads `kernel7.img` into memory and starts execution from the beginning of the file. That's why the `.text.boot` section must be first; we are going to put the OS startup code inside this section. 
+After startup, the Raspberry Pi loads `kernel8.img` into memory and starts execution from the beginning of the file. That's why the `.text.boot` section must be first; we are going to put the OS startup code inside this section. 
 The `.text`, `.rodata`, and `.data` sections contain kernel-compiled instructions, read-only data, and normal data––there is nothing special to add about them.
 The `.bss` section contains data that should be initialized to 0. By putting such data in a separate section, the compiler can save some space in the ELF binary––only the section size is stored in the ELF header, but the section itself is omitted. After loading the image into memory, we must initialize the `.bss` section to 0; that's why we need to record the start and end of the section (hence the `bss_begin` and `bss_end` symbols) and align the section so that it starts at an address that is a multiple of 8. If the section is not aligned, it would be more difficult to use the `str` instruction to store 0 at the beginning of the `bss` section because the `str` instruction can be used only with 8-byte-aligned addresses.
 
@@ -214,7 +215,7 @@ After cleaning the `.bss` section, we initialize the stack pointer and pass exec
 For those of you who are not familiar with ARM assembler syntax, let me quickly summarize the instructions that we have used:
 
 * [**mrs**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289881374.htm) Load value from a system register to one of the general purpose registers (x0–x30)
-* [**and**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289863017.htm) Perform the logical AND operation. We use this command to strip the last two bytes from the value we obtain from the `mpidr_el1` register.
+* [**and**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289863017.htm) Perform the logical AND operation. We use this command to strip the last byte from the value we obtain from the `mpidr_el1` register.
 * [**cbz**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289867296.htm) Compare the result of the previously executed operation to 0 and jump (or `branch` in ARM terminology) to the provided label if the comparison yields true.
 * [**b**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289863797.htm) Perform an unconditional branch to some label.
 * [**adr**](http://www.keil.com/support/man/docs/armasm/armasm_dom1361289862147.htm) Load a label's relative address into the target register. In this case, we want pointers to the start and end of the `.bss` region.
@@ -247,11 +248,13 @@ This function is one of the simplest in the kernel. It works with the `Mini UART
 
 ### Raspberry Pi devices 
 
-Now we are going to dig into something specific to the Raspberry Pi. Before we begin, I recommend that you download the [BCM2835 ARM Peripherals manual](https://www.raspberrypi.org/documentation/hardware/raspberrypi/bcm2835/BCM2835-ARM-Peripherals.pdf). BCM2835 is a board that is used by the Raspberry Pi Models A, B, and B+. The Raspberry Pi 3 uses the BCM2837 board, but its underlying architecture is identical to BCM2835.
+Now we are going to dig into something specific to the Raspberry Pi. Before we begin, I recommend that you download the [BCM2837 ARM Peripherals manual](https://github.com/raspberrypi/documentation/files/1888662/BCM2837-ARM-Peripherals.-.Revised.-.V2-1.pdf). BCM2837 is a board that is used by the Raspberry Pi 3 Models B, and B+. Sometime in our discussion, I will also mention BCM2835 and BCM2836 - those are names of the board used in older versions of the Raspberry Pi.  
 
-Before we proceed to the implementation details, I want to share some basic concepts on how to work with memory-mapped devices. BCM2835 is a simple [SOC (System on a chip)](https://en.wikipedia.org/wiki/System_on_a_chip) board. In such a board, access to all devices is performed via memory-mapped registers. The Raspberry Pi 3 reserves the memory above address `0x3F000000` for devices. To activate or configure a particular device, you need to write some data in one of the device's registers. A device register is just a 32-bit region of memory. The meaning of each bit in each device register is described in the `BCM2835 ARM Peripherals` manual.
+Before we proceed to the implementation details, I want to share some basic concepts on how to work with memory-mapped devices. BCM2837 is a simple [SOC (System on a chip)](https://en.wikipedia.org/wiki/System_on_a_chip) board. In such a board, access to all devices is performed via memory-mapped registers. The Raspberry Pi 3 reserves the memory above address `0x3F000000` for devices. To activate or configure a particular device, you need to write some data in one of the device's registers. A device register is just a 32-bit region of memory. The meaning of each bit in each device register is described in the `BCM2837 ARM Peripherals` manual. Take a look at section 1.2.3 ARM physical addresses in the manual and the surrounding documentation for more context on why we use `0x3F000000` as a base address (even though `0x7E000000` is used throughout the manual).
 
-From the `kernel_main` function, you can guess that we are going to work with a Mini UART device. UART stands for [Universal asynchronous receiver-transmitter](https://en.wikipedia.org/wiki/Universal_asynchronous_receiver-transmitter). This device is capable of converting values stored in one of its memory mapped registers to a sequence of high and low voltages. This sequence is passed to your computer via the `TTL-to-serial cable` and is interpreted by your terminal emulator. We are going to use the Mini UART to facilitate communication with our Raspberry Pi. If you want to see the specification of the Mini UART registers, please go to page 8 of the `BCM2835 ARM Peripherals` manual.
+From the `kernel_main` function, you can guess that we are going to work with a Mini UART device. UART stands for [Universal asynchronous receiver-transmitter](https://en.wikipedia.org/wiki/Universal_asynchronous_receiver-transmitter). This device is capable of converting values stored in one of its memory mapped registers to a sequence of high and low voltages. This sequence is passed to your computer via the `TTL-to-serial cable` and is interpreted by your terminal emulator. We are going to use the Mini UART to facilitate communication with our Raspberry Pi. If you want to see the specification of the Mini UART registers, please go to page 8 of the `BCM2837 ARM Peripherals` manual. 
+
+A Raspberry Pi has two UARTs: Mini UART and PL011 UART. In this tutorial, we are going to work only with the first one, because it is simpler. There is, however, an optional [exercise](https://github.com/s-matyukevich/raspberry-pi-os/blob/master/docs/lesson01/exercises.md) that shows how to work with PL011 UART. You can refer to the [official documentation](https://www.raspberrypi.org/documentation/configuration/uart.md) if you want to find out more about Raspberry Pi UARTs and learn the difference between them.
 
 Another device that you need to familiarize yourself with is the GPIO [General-purpose input/output](https://en.wikipedia.org/wiki/General-purpose_input/output). GPIOs are responsible for controlling `GPIO pins`. You should be able to easily recognize them in the image below:
 
@@ -289,9 +292,8 @@ void uart_init ( void )
     put32(AUX_MU_LCR_REG,3);                //Enable 8 bit mode
     put32(AUX_MU_MCR_REG,0);                //Set RTS line to be always high
     put32(AUX_MU_BAUD_REG,270);             //Set baud rate to 115200
-    put32(AUX_MU_IIR_REG,6);                //Clear FIFO
 
-    put32(AUX_MU_CNTL_REG,3);               //Finaly, enable transmitter and receiver
+    put32(AUX_MU_CNTL_REG,3);               //Finally, enable transmitter and receiver
 }
 ``` 
 
@@ -299,11 +301,11 @@ Here, we use the two functions `put32` and `get32`. Those functions are very sim
 
 #### GPIO alternative function selection 
 
-First, we need to activate the GPIO pins. Most of the pins can be used with different devices, so before using a particular pin, we need to select the pin's `alternative function`. An `alternative function` is just a number from 0 to 5 that can be set for each pin and configures which device is connected to the pin. You can see the list of all available GPIO alternative functions in the image below (the image is taken from page 102 of `BCM2835 ARM Peripherals` manual):
+First, we need to activate the GPIO pins. Most of the pins can be used with different devices, so before using a particular pin, we need to select the pin's `alternative function`. An `alternative function` is just a number from 0 to 5 that can be set for each pin and configures which device is connected to the pin. You can see the list of all available GPIO alternative functions in the image below (the image is taken from page 102 of `BCM2837 ARM Peripherals` manual):
 
 ![Raspberry Pi GPIO alternative functions](../../images/alt.png?raw=true)
 
-Here you can see that pins 14 and 15 have the TXD1 and RXD1 alternative functions available. This means that if we select alternative function number 5 for pins 14 and 15, they will be used as a Mini UART Transmit Data pin and Mini UART Receive Data pin, respectively. The `GPFSEL1` register is used to control alternative functions for pins 10-19. The meaning of all the bits in those registers is shown in the following table (page 92 of `BCM2835 ARM Peripherals` manual):
+Here you can see that pins 14 and 15 have the TXD1 and RXD1 alternative functions available. This means that if we select alternative function number 5 for pins 14 and 15, they will be used as a Mini UART Transmit Data pin and Mini UART Receive Data pin, respectively. The `GPFSEL1` register is used to control alternative functions for pins 10-19. The meaning of all the bits in those registers is shown in the following table (page 92 of `BCM2837 ARM Peripherals` manual):
 
 ![Raspberry Pi GPIO function selector](../../images/gpfsel1.png?raw=true)
 
@@ -326,7 +328,7 @@ When you work with Raspberry Pi GPIO pins, you will often encounter terms such a
 
 If you use a particular pin as input and don't connect anything to this pin, you will not be able to identify whether the value of the pin is 1 or 0. In fact, the device will report random values. The pull-up/pull-down mechanism allows you to overcome this issue. If you set the pin to the pull-up state and nothing is connected to it, it will report `1` all the time (for the pull-down state, the value will always be 0). In our case, we need neither the pull-up nor the pull-down state, because both the 14 and 15 pins are going to be connected all the time. The pin state is preserved even after a reboot, so before using any pin, we always have to initialize its state. There are three available states: pull-up, pull-down, and neither (to remove the current pull-up or pull-down state), and we need the third one.
 
-Switching between pin states is not a very simple procedure because it requires physically toggling a switch on the electric circuit. This process involves the `GPPUD` and `GPPUDCLK` registers and is described on page 101 of the `BCM2835 ARM Peripherals` manual. I copied the description here:
+Switching between pin states is not a very simple procedure because it requires physically toggling a switch on the electric circuit. This process involves the `GPPUD` and `GPPUDCLK` registers and is described on page 101 of the `BCM2837 ARM Peripherals` manual. I copied the description here:
 
 ```
 The GPIO Pull-up/down Clock Registers control the actuation of internal pull-downs on
@@ -367,7 +369,7 @@ Now our Mini UART is connected to the GPIO pins, and the pins are configured. Th
     put32(AUX_MU_BAUD_REG,270);             //Set baud rate to 115200
     put32(AUX_MU_IIR_REG,6);                //Clear FIFO
 
-    put32(AUX_MU_CNTL_REG,3);               //Finaly, enable transmitter and receiver
+    put32(AUX_MU_CNTL_REG,3);               //Finally, enable transmitter and receiver
 ```
 Let's examine this code snippet line by line. 
 
@@ -389,7 +391,7 @@ It is possible to configure the Mini UART to generate a processor interrupt each
 ```
     put32(AUX_MU_LCR_REG,3);                //Enable 8 bit mode
 ```
-Mini UART can support either 7- or 8-bit operations. This is because an ASCII character is 7 bits for the standard set and 8 bits for the extended. We are going to use 8-bit mode. Note that the description of the `AUX_MU_LCR_REG` register in the `BCM2835 ARM Peripherals` manual has an error. All such errors are listed [here](https://elinux.org/BCM2835_datasheet_errata)
+Mini UART can support either 7- or 8-bit operations. This is because an ASCII character is 7 bits for the standard set and 8 bits for the extended. We are going to use 8-bit mode. 
 
 ```
     put32(AUX_MU_MCR_REG,0);                //Set RTS line to be always high
@@ -406,7 +408,7 @@ baudrate = system_clock_freq / (8 * ( baudrate_reg + 1 ))
 The `system_clock_freq` is 250 MHz, so we can easily calculate the value of `baudrate_reg` as 270.
 
 ``` 
-    put32(AUX_MU_CNTL_REG,3);               //Finaly, enable transmitter and receiver
+    put32(AUX_MU_CNTL_REG,3);               //Finally, enable transmitter and receiver
 ```
 After this line is executed, the Mini UART is ready for work!
 
@@ -455,16 +457,14 @@ The Raspberry Pi startup sequence is the following (simplified):
 
 1. The device is powered on.
 1. The GPU starts up and reads the `config.txt` file from the boot partition. This file contains some configuration parameters that the GPU uses to further adjust the startup sequence.
-1. `kernel7.img` is loaded into memory and executed.
+1. `kernel8.img` is loaded into memory and executed.
 
 To be able to run our simple OS, the `config.txt` file should be the following:
 
 ```
-arm_control=0x200
 kernel_old=1
 disable_commandline_tags=1
 ```
-* `arm_control=0x200` specifies that the processor should be booted in 64-bit mode. 
 * `kernel_old=1` specifies that the kernel image should be loaded at address 0.
 * `disable_commandline_tags` instructs the GPU to not pass any command line arguments to the booted image.
 
@@ -474,11 +474,27 @@ disable_commandline_tags=1
 Now that we have gone through all of the source code, it is time to see it work. To build and test the kernel you need to  do the following:
 
 1. Execute `./build.sh` or `./build.bat` from [src/lesson01](https://github.com/s-matyukevich/raspberry-pi-os/tree/master/src/lesson01) in order to build the kernel. 
-1. Copy the generated `kernel7.img` file to the `boot` partition of your Raspberry Pi flash card. Make sure you left all other files in the boot partition untouched (see [this](https://github.com/s-matyukevich/raspberry-pi-os/issues/43) issue for details)
+1. Copy the generated `kernel8.img` file to the `boot` partition of your Raspberry Pi flash card and delete `kernel7.img` as well as any other `kernel*.img` files that be present on your SD card. Make sure you left all other files in the boot partition untouched (see [43](https://github.com/s-matyukevich/raspberry-pi-os/issues/43) and [158](https://github.com/s-matyukevich/raspberry-pi-os/issues/158) issues for details)
 1. Modify the `config.txt` file as described in the previous section.
 1. Connect the USB-to-TTL serial cable as described in the [Prerequisites](../Prerequisites.md).
 1. Power on your Raspberry Pi.
 1. Open your terminal emulator. You should be able to see the `Hello, world!` message there.
+
+Note that the sequence of steps described above asumes that you have Raspbian installed on your SD card. It is also posible to run the RPi OS using an empty SD card.
+
+1. Prepare your SD card:
+    * Use an MBR partition table
+    * Format the boot partition as FAT32
+    > The card should be formatted exactly in the same way as it is required to install Raspbian. Check `HOW TO FORMAT AN SD CARD AS FAT` section in the [official documenation](https://www.raspberrypi.org/documentation/installation/noobs.md) for more information.
+1. Copy the following files to the card:
+    * [bootcode.bin](https://github.com/raspberrypi/firmware/blob/master/boot/bootcode.bin) This is the GPU bootloader, it contains the GPU code to start the GPU and load the GPU firmware. 
+    * [start.elf](https://github.com/raspberrypi/firmware/blob/master/boot/start.elf) This is the GPU firmware. It reads `config.txt` and enables the GPU to load and run ARM specific user code from `kernel8.img`
+1. Copy `kernel8.img` and `config.txt` files. 
+1. Connect the USB-to-TTL serial cable.
+1. Power on your Raspberry Pi.
+1. Use your terminal emulator to connect to the RPi OS. 
+
+Unfortunately, all Raspberry Pi firmware files are closed-sourced and undocumented. For more information about the Raspberry Pi startup sequence, you can refer to some unofficial sources, like [this](https://raspberrypi.stackexchange.com/questions/10442/what-is-the-boot-sequence) StackExchange question or [this](https://github.com/DieterReuter/workshop-raspberrypi-64bit-os/blob/master/part1-bootloader.md) Github repository.
 
 ##### Previous Page
 
